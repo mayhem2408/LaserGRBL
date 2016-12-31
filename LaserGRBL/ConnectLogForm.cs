@@ -16,19 +16,18 @@ namespace LaserGRBL
 	/// <summary>
 	/// Description of ConnectLogForm.
 	/// </summary>
-	public partial class ConnectLogForm : UserControls.DockingManager.DockContent
+	public partial class ConnectLogForm : LaserGRBL.UserControls.DockingManager.DockContent
 	{
 		private object[] baudRates = { 4800, 9600, 19200, 38400, 57600, 115200, 230400 };
 		
-		GrblCom ComPort;
-		GrblFile LoadedFile;
+		GrblCore Core;
 		
-		public ConnectLogForm(GrblCom com, GrblFile file)
+		public ConnectLogForm(GrblCore core)
 		{
 			InitializeComponent();
-			ComPort = com;
-			LoadedFile = file;
-			CmdLog.SetCom(com);
+			Core = core;
+			Core.OnFileLoaded += ComPort_OnFileLoaded;
+			CmdLog.SetCom(core);
 			
 			PB.Bars.Add(new LaserGRBL.UserControls.DoubleProgressBar.Bar(Color.LightSkyBlue));
 			PB.Bars.Add(new LaserGRBL.UserControls.DoubleProgressBar.Bar(Color.Pink));
@@ -36,6 +35,11 @@ namespace LaserGRBL
 			InitSpeedCB();
 			InitPortCB();
 			TimerUpdate();
+		}
+
+		void ComPort_OnFileLoaded(long elapsed, string filename)
+		{
+			TbFileName.Text = filename;
 		}
 
 		private void InitSpeedCB() //Baud Rates combo box
@@ -61,14 +65,14 @@ namespace LaserGRBL
 		
 		void BtnConnectDisconnectClick(object sender, EventArgs e)
 		{
-			if (ComPort.MachineStatus == GrblCom.MacStatus.Disconnected && CBSpeed.SelectedItem != null && CBPort.SelectedItem != null)
+			if (Core.MachineStatus == GrblCore.MacStatus.Disconnected && CBSpeed.SelectedItem != null && CBPort.SelectedItem != null)
 			{
-				try{ComPort.OpenCom((string)CBPort.SelectedItem, (int)CBSpeed.SelectedItem);}
+				try{Core.OpenCom();}
 				catch { }
 			}
 			else
 			{
-				try{ComPort.CloseCom();}
+				try{Core.CloseCom();}
 				catch { }
 			}
 
@@ -77,51 +81,34 @@ namespace LaserGRBL
 		
 		void BtnOpenClick(object sender, EventArgs e)
 		{
-			string filename = null;
-			using (System.Windows.Forms.OpenFileDialog ofd = new OpenFileDialog())
-			{
-				ofd.Filter = "GCODE Files|*.nc;*.gcode";
-				ofd.CheckFileExists = true;
-				ofd.Multiselect = false;
-				ofd.RestoreDirectory = true;
-				if (ofd.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-					filename = ofd.FileName;
-			}
-
-			if (filename != null)
-			{
-				Cursor = Cursors.WaitCursor;
-				LoadedFile.LoadFile(filename);
-				TbFileName.Text = filename;
-				Cursor = Cursors.Default;
-			}
+			Core.OpenFile();
 		}
-		
+
 		void BtnRunProgramClick(object sender, EventArgs e)
 		{
-			ComPort.EnqueueProgram(LoadedFile);
+			Core.EnqueueProgram();
 		}
 		void TxtManualCommandCommandEntered(string command)
 		{
-			ComPort.EnqueueCommand(new GrblCommand(command));
+			Core.EnqueueCommand(new GrblCommand(command));
 		}
 		
 		public void TimerUpdate()
 		{
 			SuspendLayout();
 
-			if (!ComPort.IsOpen && System.IO.Ports.SerialPort.GetPortNames().Length != CBPort.Items.Count)
+			if (!Core.IsOpen && System.IO.Ports.SerialPort.GetPortNames().Length != CBPort.Items.Count)
 				InitPortCB();
 			
-			PB.Maximum = ComPort.ProgramTarget;
-			PB.Bars[0].Value = ComPort.ProgramSent;
-			PB.Bars[1].Value = ComPort.ProgramExecuted;
-			
-			string val = Tools.Utils.TimeSpanToString(ComPort.ProgramTime, Tools.Utils.TimePrecision.Second, Tools.Utils.TimePrecision.Second);
+			PB.Maximum = Core.ProgramTarget;
+			PB.Bars[0].Value = Core.ProgramSent;
+			PB.Bars[1].Value = Core.ProgramExecuted;
+
+			string val = Tools.Utils.TimeSpanToString(Core.ProgramTime, Tools.Utils.TimePrecision.Minute, Tools.Utils.TimePrecision.Second);
 
 			if (val != "now")
 				PB.PercString = val;
-			else if (ComPort.InProgram)
+			else if (Core.InProgram)
 				PB.PercString = "0 sec";
 			else
 				PB.PercString = "";
@@ -140,21 +127,27 @@ namespace LaserGRBL
 			Check: Grbl is in check G-code mode. It will process and respond to all G-code commands, but not motion or turn on anything. Once toggled off with another '$C' command, Grbl will reset itself.
 			*/
 
-			BtnConnectDisconnect.UseAltImage = ComPort.IsOpen;
-			BtnOpen.Enabled = true;
-			BtnRunProgram.Enabled = LoadedFile != null && LoadedFile.Count > 0 && ComPort.IsOpen && ComPort.MachineStatus == GrblCom.MacStatus.Idle;
+			BtnConnectDisconnect.UseAltImage = Core.IsOpen;
+			BtnRunProgram.Enabled = Core.CanSendFile;
+			BtnOpen.Enabled = Core.CanLoadNewFile;
 
 			bool old = TxtManualCommand.Enabled;
-			TxtManualCommand.Enabled = ComPort.IsOpen && ComPort.MachineStatus != GrblCom.MacStatus.Disconnected;
+			TxtManualCommand.Enabled = Core.CanSendManualCommand;
 			if (old == false && TxtManualCommand.Enabled == true)
 				TxtManualCommand.Focus();
 			
-			CBPort.Enabled = !ComPort.IsOpen;
-			CBSpeed.Enabled = !ComPort.IsOpen;
+			CBPort.Enabled = !Core.IsOpen;
+			CBSpeed.Enabled = !Core.IsOpen;
 
 			CmdLog.TimerUpdate();
 
 			ResumeLayout();
 		}
+
+		private void CBPort_SelectedIndexChanged(object sender, EventArgs e)
+		{Core.PortName = (string)CBPort.SelectedItem;}
+
+		private void CBSpeed_SelectedIndexChanged(object sender, EventArgs e)
+		{Core.BaudRate = (int)CBSpeed.SelectedItem;}
 	}
 }
