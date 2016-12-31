@@ -377,7 +377,7 @@ namespace LaserGRBL.RasterConverter
 						}
 					});
 			}
-            else if (formula == Formula.OpticalCorrect)
+            else if (formula == Formula.OpticalCorrect) // Reference: http://www.had2know.com/technology/rgb-to-gray-scale-converter.html
             {
                 cm = new ColorMatrix(new float[][] { //x = 0.299r + 0.587g + 0.114b
                         new float[] {
