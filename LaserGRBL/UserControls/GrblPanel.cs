@@ -8,8 +8,7 @@ namespace LaserGRBL.UserControls
 {
 	public partial class GrblPanel : UserControl
 	{
-		GrblFile LoadedFile;
-		GrblCom ComPort;
+		GrblCore Core;
 		System.Drawing.Bitmap mBitmap;
 		System.Threading.Thread TH;
 		Matrix mLastMatrix;
@@ -29,26 +28,22 @@ namespace LaserGRBL.UserControls
 		{
 			base.OnPaint(e);
 		
-			lock(this)
-			{
-				if (mBitmap != null)
-					e.Graphics.DrawImage(mBitmap, 0, 0, Width, Height);
+			if (mBitmap != null)
+				e.Graphics.DrawImage(mBitmap, 0, 0, Width, Height);
 
 
-				PointF p = TranslatePoint(mLastPosition);
-				e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-				e.Graphics.DrawLine(Pens.Blue, (int)p.X, (int)p.Y - 3, (int)p.X, (int)p.Y - 3 + 7);
-				e.Graphics.DrawLine(Pens.Blue, (int)p.X - 3, (int)p.Y, (int)p.X - 3 + 7, (int)p.Y);
-			}
+			PointF p = TranslatePoint(mLastPosition);
+			e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+			e.Graphics.DrawLine(Pens.Blue, (int)p.X, (int)p.Y - 3, (int)p.X, (int)p.Y - 3 + 7);
+			e.Graphics.DrawLine(Pens.Blue, (int)p.X - 3, (int)p.Y, (int)p.X - 3 + 7, (int)p.Y);
 		}
 		
 			
 
-		public void SetComProgram(GrblCom com, GrblFile file)
+		public void SetComProgram(GrblCore core)
 		{
-			ComPort = com;
-			LoadedFile = file;
-			LoadedFile.OnFileLoaded += OnFileLoaded;
+			Core = core;
+			Core.OnFileLoaded += OnFileLoaded;
 		}
 
 		void OnFileLoaded(long elapsed, string filename)
@@ -78,7 +73,7 @@ namespace LaserGRBL.UserControls
 		{
 			Size wSize = Size;
 			
-			if (wSize.IsEmpty)
+			if (wSize.Width < 1 || wSize.Height < 1)
 				return;
 			
 			System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(wSize.Width, wSize.Height);
@@ -100,8 +95,8 @@ namespace LaserGRBL.UserControls
 
 				g.DrawLines(Pens.Black, new PointF[] { new PointF(0, wSize.Height), new PointF(0, 0), new PointF(wSize.Width, 0) });
 
-				if (LoadedFile != null)
-					LoadedFile.DrawOnGraphics(g, wSize);
+				if (Core != null && Core.HasProgram)
+					Core.LoadedFile.DrawOnGraphics(g, wSize);
 
 				mLastMatrix = g.Transform;
 			}
@@ -134,9 +129,9 @@ namespace LaserGRBL.UserControls
 
 		public void TimerUpdate()
 		{
-			if (ComPort != null && mLastPosition != ComPort.LaserPosition)
+			if (Core != null && mLastPosition != Core.LaserPosition)
 			{
-				mLastPosition = ComPort.LaserPosition;
+				mLastPosition = Core.LaserPosition;
 				Invalidate();
 			}
 		}
